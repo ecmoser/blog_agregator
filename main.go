@@ -70,7 +70,7 @@ func createConfigFile() error {
 
 	defer file.Close()
 
-	file.WriteString(`{"db_url": "postgres://example"}`)
+	file.WriteString(`{"db_url": "postgres://postgres:postgres@localhost:5432/gator?sslmode=disable"}`)
 
 	return nil
 }
