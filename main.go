@@ -1,16 +1,26 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 
 	cfg "github.com/ecmoser/blog_aggregator/internal/config"
+	"github.com/ecmoser/blog_aggregator/internal/database"
 )
 
+const dbUrl = "postgres://postgres:postgres@localhost:5432/gator?sslmode=disable"
+
 type state struct {
-	config *cfg.Config
+	config    *cfg.Config
+	dbQueries *database.Queries
 }
 
 type command struct {
@@ -47,12 +57,46 @@ func handlerLogin(s *state, cmd command) error {
 		return fmt.Errorf("username is required for login")
 	}
 
+	_, err = s.dbQueries.GetUser(context.Background(), cmd.args[0])
+	if err != nil {
+		return fmt.Errorf("user %s not found", cmd.args[0])
+	}
+
 	err = s.config.SetUser(cmd.args[0], wd)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("The user " + cmd.args[0] + " has been set")
+
+	return nil
+}
+
+func handlerRegister(s *state, cmd command) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	if len(cmd.args) == 0 {
+		return fmt.Errorf("username is required for registration")
+	}
+
+	_, err = s.dbQueries.GetUser(context.Background(), cmd.args[0])
+	if err == nil {
+		return fmt.Errorf("user %s already exists", cmd.args[0])
+	}
+
+	s.dbQueries.CreateUser(context.Background(), database.CreateUserParams{
+		ID:        int32(uuid.New().ID()),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name:      cmd.args[0],
+	})
+
+	s.config.SetUser(cmd.args[0], homeDir)
+
+	fmt.Println("The user " + cmd.args[0] + " has been registered")
 
 	return nil
 }
@@ -70,7 +114,7 @@ func createConfigFile() error {
 
 	defer file.Close()
 
-	file.WriteString(`{"db_url": "postgres://postgres:postgres@localhost:5432/gator?sslmode=disable"}`)
+	file.WriteString(`{"db_url": "` + dbUrl + `"}`)
 
 	return nil
 }
@@ -80,6 +124,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	db, err := sql.Open("postgres", dbUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	dbQueries := database.New(db)
 
 	if _, err := os.Stat(filepath.Join(workingDir, ".gatorconfig.json")); os.IsNotExist(err) {
 		err = createConfigFile()
@@ -93,11 +144,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cfgState := state{config: &config}
+	dbState := state{config: &config, dbQueries: dbQueries}
 
 	cmds := commands{functions: make(map[string]func(s *state, cmd command) error)}
 
 	cmds.register("login", handlerLogin)
+	cmds.register("register", handlerRegister)
 
 	args := os.Args
 
@@ -107,7 +159,7 @@ func main() {
 
 	cmd := command{name: args[1], args: args[2:]}
 
-	err = cmds.run(&cfgState, cmd)
+	err = cmds.run(&dbState, cmd)
 	if err != nil {
 		log.Fatal(err)
 	}
