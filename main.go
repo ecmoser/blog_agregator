@@ -101,6 +101,38 @@ func handlerRegister(s *state, cmd command) error {
 	return nil
 }
 
+func handlerReset(s *state, cmd command) error {
+	err := s.dbQueries.EmptyUsersTable(context.Background())
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("The users table has been reset")
+
+	return nil
+}
+
+func handlerUsers(s *state, cmd command) error {
+	users, err := s.dbQueries.GetUsers(context.Background())
+	if err != nil {
+		return err
+	}
+
+	output := "\n"
+
+	for _, user := range users {
+		output += "* " + user.Name
+		if user.Name == s.config.CurrentUserName {
+			output += " (current)"
+		}
+		output += "\n"
+	}
+
+	fmt.Println(output)
+
+	return nil
+}
+
 func createConfigFile() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -150,6 +182,8 @@ func main() {
 
 	cmds.register("login", handlerLogin)
 	cmds.register("register", handlerRegister)
+	cmds.register("reset", handlerReset)
+	cmds.register("users", handlerUsers)
 
 	args := os.Args
 
