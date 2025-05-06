@@ -246,6 +246,35 @@ func handlerFollowing(s *state, cmd command) error {
 	return nil
 }
 
+func handlerUnfollow(s *state, cmd command) error {
+	if len(cmd.args) == 0 {
+		return fmt.Errorf("url is required for unfollowing")
+	}
+
+	user, err := s.dbQueries.GetUser(context.Background(), s.config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+
+	feed, err := s.dbQueries.GetFeed(context.Background(), cmd.args[0])
+	if err != nil {
+		return err
+	}
+
+	_, err = s.dbQueries.DeleteFeedFollow(context.Background(), database.DeleteFeedFollowParams{
+		FeedID: feed.ID,
+		UserID: user.ID,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("The feed " + feed.Name + " has been unfollowed by user " + user.Name)
+
+	return nil
+}
+
 func createConfigFile() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -312,6 +341,7 @@ func main() {
 	cmds.register("feeds", handlerFeeds)
 	cmds.register("follow", middlewareLoggedIn(handlerFollow))
 	cmds.register("following", middlewareLoggedIn(handlerFollowing))
+	cmds.register("unfollow", middlewareLoggedIn(handlerUnfollow))
 
 	args := os.Args
 

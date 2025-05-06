@@ -30,3 +30,9 @@ RETURNING *,
 -- name: GetFeed :one
 SELECT * FROM feeds
 WHERE url = $1;
+
+-- name: DeleteFeedFollow :one
+DELETE FROM feed_follows
+WHERE feed_id = $1
+AND user_id = $2
+RETURNING *;
