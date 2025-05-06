@@ -202,16 +202,16 @@ func handlerFeeds(s *state, cmd command) error {
 }
 
 func handlerFollow(s *state, cmd command) error {
+	user, err := s.dbQueries.GetUser(context.Background(), s.config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+
 	if len(cmd.args) == 0 {
 		return fmt.Errorf("url is required for following")
 	}
 
 	feed, err := s.dbQueries.GetFeed(context.Background(), cmd.args[0])
-	if err != nil {
-		return err
-	}
-
-	user, err := s.dbQueries.GetUser(context.Background(), s.config.CurrentUserName)
 	if err != nil {
 		return err
 	}
@@ -264,6 +264,16 @@ func createConfigFile() error {
 	return nil
 }
 
+func middlewareLoggedIn(handler func(s *state, cmd command) error) func(*state, command) error {
+	return func(s *state, cmd command) error {
+		if _, err := s.dbQueries.GetUser(context.Background(), s.config.CurrentUserName); err != nil {
+			// User is not logged in
+			return fmt.Errorf("user not logged in")
+		}
+		return handler(s, cmd)
+	}
+}
+
 func main() {
 	workingDir, err := os.UserHomeDir()
 	if err != nil {
@@ -298,10 +308,10 @@ func main() {
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerUsers)
 	cmds.register("agg", handlerAgg)
-	cmds.register("addfeed", handlerAddFeed)
+	cmds.register("addfeed", middlewareLoggedIn(handlerAddFeed))
 	cmds.register("feeds", handlerFeeds)
-	cmds.register("follow", handlerFollow)
-	cmds.register("following", handlerFollowing)
+	cmds.register("follow", middlewareLoggedIn(handlerFollow))
+	cmds.register("following", middlewareLoggedIn(handlerFollowing))
 
 	args := os.Args
 
