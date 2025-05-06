@@ -154,7 +154,7 @@ func handlerAddFeed(s *state, cmd command) error {
 		return err
 	}
 
-	_, err = s.dbQueries.CreateFeed(context.Background(), database.CreateFeedParams{
+	feed, err := s.dbQueries.CreateFeed(context.Background(), database.CreateFeedParams{
 		ID:        int32(uuid.New().ID()),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -166,6 +166,14 @@ func handlerAddFeed(s *state, cmd command) error {
 	if err != nil {
 		return err
 	}
+
+	_, err = s.dbQueries.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
+		ID:        int32(uuid.New().ID()),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		UserID:    user.ID,
+		FeedID:    feed.ID,
+	})
 
 	fmt.Println("The feed " + cmd.args[0] + " has been added with url " + cmd.args[1] + " for user with ID " + string(user.ID))
 
@@ -186,6 +194,51 @@ func handlerFeeds(s *state, cmd command) error {
 			return err
 		}
 		output += feed.Name + ", " + feed.Url + ", " + userName + "\n"
+	}
+
+	fmt.Println(output)
+
+	return nil
+}
+
+func handlerFollow(s *state, cmd command) error {
+	if len(cmd.args) == 0 {
+		return fmt.Errorf("url is required for following")
+	}
+
+	feed, err := s.dbQueries.GetFeed(context.Background(), cmd.args[0])
+	if err != nil {
+		return err
+	}
+
+	user, err := s.dbQueries.GetUser(context.Background(), s.config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.dbQueries.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
+		ID:        int32(uuid.New().ID()),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		UserID:    user.ID,
+		FeedID:    feed.ID,
+	})
+
+	fmt.Println("The feed " + feed.Name + " has been followed by user " + user.Name)
+
+	return nil
+}
+
+func handlerFollowing(s *state, cmd command) error {
+	feedFollows, err := s.dbQueries.GetFeedFollowsForUser(context.Background(), s.config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+
+	output := "\n"
+
+	for _, ff := range feedFollows {
+		output += "* " + ff.FeedName + " (" + ff.Url + ")\n"
 	}
 
 	fmt.Println(output)
@@ -247,6 +300,8 @@ func main() {
 	cmds.register("agg", handlerAgg)
 	cmds.register("addfeed", handlerAddFeed)
 	cmds.register("feeds", handlerFeeds)
+	cmds.register("follow", handlerFollow)
+	cmds.register("following", handlerFollowing)
 
 	args := os.Args
 
