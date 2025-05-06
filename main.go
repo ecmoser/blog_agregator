@@ -144,6 +144,55 @@ func handlerAgg(s *state, cmd command) error {
 	return nil
 }
 
+func handlerAddFeed(s *state, cmd command) error {
+	if len(cmd.args) < 2 {
+		return fmt.Errorf("adding feed requires a name and a url")
+	}
+
+	user, err := s.dbQueries.GetUser(context.Background(), s.config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.dbQueries.CreateFeed(context.Background(), database.CreateFeedParams{
+		ID:        int32(uuid.New().ID()),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name:      cmd.args[0],
+		Url:       cmd.args[1],
+		UserID:    user.ID,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("The feed " + cmd.args[0] + " has been added with url " + cmd.args[1] + " for user with ID " + string(user.ID))
+
+	return nil
+}
+
+func handlerFeeds(s *state, cmd command) error {
+	output := "\nName, URL, User\n"
+
+	feeds, err := s.dbQueries.GetFeeds(context.Background())
+	if err != nil {
+		return err
+	}
+
+	for _, feed := range feeds {
+		userName, err := s.dbQueries.GetUserName(context.Background(), feed.UserID)
+		if err != nil {
+			return err
+		}
+		output += feed.Name + ", " + feed.Url + ", " + userName + "\n"
+	}
+
+	fmt.Println(output)
+
+	return nil
+}
+
 func createConfigFile() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -196,6 +245,8 @@ func main() {
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerUsers)
 	cmds.register("agg", handlerAgg)
+	cmds.register("addfeed", handlerAddFeed)
+	cmds.register("feeds", handlerFeeds)
 
 	args := os.Args
 
