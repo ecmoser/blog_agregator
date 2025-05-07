@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -134,14 +136,25 @@ func handlerUsers(s *state, cmd command) error {
 }
 
 func handlerAgg(s *state, cmd command) error {
-	feed, err := FetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
-	if err != nil {
-		return err
+	if len(cmd.args) == 0 {
+		return fmt.Errorf("Time between fetches is required")
 	}
 
-	fmt.Println(feed)
+	timeBetweenRequests, err := time.ParseDuration(cmd.args[0])
+	if err != nil {
+		return fmt.Errorf("invalid time duration: %s", cmd.args[0])
+	}
 
-	return nil
+	fmt.Println("Collecting feeds evert " + timeBetweenRequests.String())
+
+	ticker := time.NewTicker(timeBetweenRequests)
+
+	for ; ; <-ticker.C {
+		err = scrapeFeeds(s)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func handlerAddFeed(s *state, cmd command) error {
@@ -275,6 +288,70 @@ func handlerUnfollow(s *state, cmd command) error {
 	return nil
 }
 
+func handlerBrowse(s *state, cmd command) error {
+	var limit int32
+	if len(cmd.args) == 0 {
+		limit = 2
+	} else {
+		limit64, err := strconv.ParseInt(cmd.args[0], 10, 32)
+		if err != nil {
+			return err
+		}
+		limit = int32(limit64)
+	}
+
+	user, err := s.dbQueries.GetUser(context.Background(), s.config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+
+	posts, err := s.dbQueries.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+		UserID: user.ID,
+		Limit:  limit,
+	})
+
+	for _, post := range posts {
+		fmt.Println(post.Title + ": " + post.Description.String)
+	}
+
+	return nil
+}
+
+func scrapeFeeds(s *state) error {
+	feed, err := s.dbQueries.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return err
+	}
+
+	_, err = s.dbQueries.MarkFeedFetched(context.Background(), feed.ID)
+	if err != nil {
+		return err
+	}
+
+	rssFeed, err := FetchFeed(context.Background(), feed.Url)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range rssFeed.Channel.Items {
+		_, err = s.dbQueries.CreatePost(context.Background(), database.CreatePostParams{
+			ID:          int32(uuid.New().ID()),
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+			Title:       item.Title,
+			Url:         item.Link,
+			Description: sql.NullString{String: item.Description, Valid: true},
+			PublishedAt: sql.NullString{String: item.PubDate, Valid: true},
+			FeedID:      feed.ID,
+		})
+		if err != nil && !strings.Contains(err.Error(), "duplicate key") {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func createConfigFile() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -342,6 +419,7 @@ func main() {
 	cmds.register("follow", middlewareLoggedIn(handlerFollow))
 	cmds.register("following", middlewareLoggedIn(handlerFollowing))
 	cmds.register("unfollow", middlewareLoggedIn(handlerUnfollow))
+	cmds.register("browse", middlewareLoggedIn(handlerBrowse))
 
 	args := os.Args
 

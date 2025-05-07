@@ -7,3 +7,6 @@ CREATE TABLE feed_follows (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE (feed_id, user_id)
 );
+
+-- +goose Down
+DROP TABLE if exists feed_follows CASCADE;
