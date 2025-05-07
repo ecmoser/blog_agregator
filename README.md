@@ -5,6 +5,14 @@ In order to use this, you must first have GoLang and Postgresql installed on you
 
 Install gator by running ```go install github.com/pressly/goose/v3/cmd/goose@latest``` in your command line, and follow instructions [here](http://github.com/gshalay/gator) for setting up your user and local server.
 
+Once gator is installed, open the psql shell and create a new database using ```CREATE DATABASE gator;```. Connect to the database with ```\c gator```, and if on linux (or WSL) set the user password by running ```ALTER USER postgres PASSWORD 'postgres';```
+
+Install goose by running ```go install github.com/pressly/goose/v3/cmd/goose@latest```.
+
+Get your connection string. If on linux it will likely be ```postgres://postgres:postgres@localhost:5432/gator```, and if on windows it will likely be ```postgres://username:@localhost:5432/gator``` with your username.
+
+Run the goose up migration to set up the tables inside your database by entering ```goose postgres <connection_string> up``` into your cli while in the ./sql/schema directory.
+
 Run go build in your command prompt while in the main directory of the project, and then run ```./blog_aggregator [command]``` to run the command
 
 After running the program once, make sure there is a config file generated and placed in your home directory called ```.gatorconfig.json```
